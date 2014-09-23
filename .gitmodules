@@ -1,0 +1,4 @@
+[submodule "YarrLib"]
+	path = YarrLib
+	url = https://github.com/bkputnam/YarrLib.git
+	branch = master

@@ -88,11 +88,11 @@ namespace RandomForest
 
 		public void Train(int? maxDepth=null, int? minPts=null)
 		{
-//			int sqrt = (int)(Math.Floor(Math.Sqrt(this.NTrainPoints)));
+			int sqrt = (int)(Math.Floor(Math.Sqrt(this.NTrainPoints)));
 			//int root = (int)(Math.Floor(Math.Pow(this.NTrainPoints, 1.0 / this.NDim)));
 
-			int _maxDepth = maxDepth ?? 10;
-			int _minPts = minPts ?? 150; //TODO - figure out better heuristic
+			int _maxDepth = maxDepth ?? sqrt;
+			int _minPts = minPts ?? sqrt; //TODO - figure out better heuristic
 
 			_Train(_maxDepth, _minPts);
 		}
@@ -136,160 +136,124 @@ namespace RandomForest
 			return -nent;
 		}
 
+        private double? _TotalEntropy;
 		private double TotalEntropy()
 		{
-			int numS = 0;
-			for (int i=0; i<NTrainPoints; i++)
-			{
-				if (TrainPoints.Labels[i] == 's')
-				{
-					numS += 1;
-				}
-			}
-			return Entropy(numS, NTrainPoints - numS);
+            if (!_TotalEntropy.HasValue)
+            {
+                int numS = 0;
+                for (int i = 0; i < NTrainPoints; i++)
+                {
+                    if (TrainPoints.Labels[i] == 's')
+                    {
+                        numS += 1;
+                    }
+                }
+                _TotalEntropy = Entropy(numS, NTrainPoints - numS);
+            }
+			return _TotalEntropy.Value;
 		}
 
-		private Tuple<int, double, double> FindBestSplit(/*bool debug=false*/)
+        private Tuple<double, double> FindBestSplit(int localDimIndex)
+        {
+            const int NSPLITS = 5;
+            double totalEntropy = TotalEntropy();
+
+            int globalDimIndex = this.TargetFeatures[localDimIndex];
+            int[] globalDimIndices = Yarr.Repeat<int>(globalDimIndex, 1);
+
+            double[] localMins = this.TrainPoints.CalcLocalMins(globalDimIndices);
+            double[] localMaxs = this.TrainPoints.CalcLocalMaxs(globalDimIndices);
+
+            double dimMin = localMins[0];
+            double dimMax = localMaxs[0];
+
+            double[] splits = RandomUtils.RandBetween(dimMin, dimMax, NSPLITS);
+
+            double maxExpectedInfo = 0.0;
+            double bestSplit = double.NaN;
+
+            for (int i=0; i<NSPLITS; i++)
+            {
+                double split = splits[i];
+
+                int nAbove, sAbove, bAbove;
+                int nBelow, sBelow, bBelow;
+                nAbove = sAbove = bAbove = nBelow = sBelow = bBelow = 0;
+                for (int rowNum = 0; rowNum < NTrainPoints; rowNum++)
+                {
+                    double val = TrainPoints.FeatureCols[globalDimIndex][rowNum];
+                    bool isSignal = TrainPoints.Labels[rowNum] == 's';
+
+                    if (val >= split)
+                    {
+                        nAbove++;
+                        if (isSignal) { sAbove++; } else { bAbove++; }
+                    }
+                    else
+                    {
+                        nBelow++;
+                        if (isSignal) { sBelow++; } else { bBelow++; }
+                    }
+                }
+
+                double probAbove = ((double)nAbove) / NTrainPoints;
+                double probBelow = 1.0 - probAbove; // == ((double)nBelow) / NTrainPoints
+
+                double entropyAbove = Entropy(sAbove, bAbove);
+                double entropyBelow = Entropy(sBelow, bBelow);
+
+                double expectedInfo = totalEntropy - ((probAbove * entropyAbove) + (probBelow * entropyBelow));
+
+                if (expectedInfo > maxExpectedInfo)
+                {
+                    maxExpectedInfo = expectedInfo;
+                    bestSplit = split;
+                }
+            }
+
+            return new Tuple<double, double>(maxExpectedInfo, bestSplit);
+        }
+
+		private Tuple<int, double, double> FindBestSplit()
 		{
-			const int NSPLITS = 5;
-
-			double maxExpectedInfo = 0.0;
-			int bestLocalDimIndex = -1;
-			double bestSplit = double.NaN;
-
-			double totalEntropy = TotalEntropy();
-
-			double[] localMins = this.TrainPoints.CalcLocalMins(this.TargetFeatures);
-			double[] localMaxs = this.TrainPoints.CalcLocalMaxs(this.TargetFeatures);
+            int bestLocalDimIndex = -1;
+            double maxExpectedInfo = 0.0;
+            double bestSplit = double.NaN;
 
 			//for each dimension, test out NSPLITS
 			//evently spaced splits, and pick the best
 			//one out of all the dimensions
 			for (int localDimIndex=0; localDimIndex<this.NDim; localDimIndex++)
 			{
-				int globalDimIndex = this.TargetFeatures[localDimIndex];
+                var dimResult = FindBestSplit(localDimIndex);
+                double expectedInfo = dimResult.Item1;
+                double split = dimResult.Item2;
 
-				double dimMin = localMins[localDimIndex];
-				double dimMax = localMaxs[localDimIndex];
-				//double splitSize = (dimMax - dimMin) / (NSPLITS + 2); //+2 for endpoints
-
-				double[] splits = RandomUtils.RandBetween(dimMin, dimMax, NSPLITS);
-
-				for (int splitNum=0; splitNum<NSPLITS; splitNum++)
-				{
-					//double split = dimMin + (splitSize * (splitNum + 1));
-					double split = splits[splitNum];
-
-					int nAbove, sAbove, bAbove;
-					int nBelow, sBelow, bBelow;
-					nAbove = sAbove = bAbove = nBelow = sBelow = bBelow = 0;
-					for (int rowNum=0; rowNum<NTrainPoints; rowNum++)
-					{
-						double val = TrainPoints.FeatureCols[globalDimIndex][rowNum];
-						bool isSignal = TrainPoints.Labels[rowNum] == 's';
-
-						if (val >= split)
-						{
-							nAbove++;
-							if (isSignal) { sAbove++; } else { bAbove++; }
-						}
-						else
-						{
-							nBelow++;
-							if (isSignal) { sBelow++; } else { bBelow++; }
-						}
-					}
-
-					double probAbove = ((double)nAbove) / NTrainPoints;
-					double probBelow = 1.0 - probAbove; // == ((double)nBelow) / NTrainPoints
-
-					double entropyAbove = Entropy(sAbove, bAbove);
-					double entropyBelow = Entropy(sBelow, bBelow);
-
-					double expectedInfo = totalEntropy - ((probAbove * entropyAbove) + (probBelow * entropyBelow));
-
-					if (expectedInfo > maxExpectedInfo)
-					{
-						maxExpectedInfo = expectedInfo;
-						bestLocalDimIndex = localDimIndex;
-						bestSplit = split;
-					}
-				}
+                if (expectedInfo > maxExpectedInfo)
+                {
+                    bestLocalDimIndex = localDimIndex;
+                    bestSplit = split;
+                    maxExpectedInfo = expectedInfo;
+                }
 			}
 
 			return new Tuple<int, double, double>(bestLocalDimIndex, bestSplit, maxExpectedInfo);
 		}
 
-		private Tuple<int, double, double> FindBestRandomSplit(/*bool debug=false*/)
+		private Tuple<int, double, double> FindBestRandomSplit()
 		{
-			const int NSPLITS = 5;
-
-			double maxExpectedInfo = 0.0;
-			int bestLocalDimIndex = -1;
-			double bestSplit = double.NaN;
-
-			double totalEntropy = TotalEntropy();
-
-			double[] localMins = this.TrainPoints.CalcLocalMins(this.TargetFeatures);
-			double[] localMaxs = this.TrainPoints.CalcLocalMaxs(this.TargetFeatures);
-
-			//for each dimension, test out NSPLITS
-			//evently spaced splits, and pick the best
-			//one out of all the dimensions
-			int localDimIndex = RNG.Next(this.NDim);
-			int globalDimIndex = this.TargetFeatures[localDimIndex];
-
-			double dimMin = localMins[localDimIndex];
-			double dimMax = localMaxs[localDimIndex];
-			double splitSize = (dimMax - dimMin) / (NSPLITS + 2); //+2 for endpoints
-
-			for (int splitNum=0; splitNum<NSPLITS; splitNum++)
-			{
-				double split = dimMin + (splitSize * (splitNum + 1));
-
-				int nAbove, sAbove, bAbove;
-				int nBelow, sBelow, bBelow;
-				nAbove = sAbove = bAbove = nBelow = sBelow = bBelow = 0;
-				for (int rowNum=0; rowNum<NTrainPoints; rowNum++)
-				{
-					double val = TrainPoints.FeatureCols[globalDimIndex][rowNum];
-					bool isSignal = TrainPoints.Labels[rowNum] == 's';
-
-					if (val >= split)
-					{
-						nAbove++;
-						if (isSignal) { sAbove++; } else { bAbove++; }
-					}
-					else
-					{
-						nBelow++;
-						if (isSignal) { sBelow++; } else { bBelow++; }
-					}
-				}
-
-				double probAbove = ((double)nAbove) / NTrainPoints;
-				double probBelow = 1.0 - probAbove; // == ((double)nBelow) / NTrainPoints
-
-				double entropyAbove = Entropy(sAbove, bAbove);
-				double entropyBelow = Entropy(sBelow, bBelow);
-
-				double expectedInfo = totalEntropy - ((probAbove * entropyAbove) + (probBelow * entropyBelow));
-
-				if (expectedInfo > maxExpectedInfo)
-				{
-					maxExpectedInfo = expectedInfo;
-					bestLocalDimIndex = localDimIndex;
-					bestSplit = split;
-				}
-			}
-
-			return new Tuple<int, double, double>(bestLocalDimIndex, bestSplit, maxExpectedInfo);
+            int localDimIndex = RNG.Next(this.NDim);
+            var result = FindBestSplit(localDimIndex);
+            double expectedInfo = result.Item1;
+            double split = result.Item2;
+            return new Tuple<int, double, double>(localDimIndex, split, expectedInfo);
 		}
 
 		private List<Tree> Split()
 		{
-			//var splitInfo = FindBestSplit();
-			var splitInfo = FindBestRandomSplit();
+			var splitInfo = FindBestSplit();
+			//var splitInfo = FindBestRandomSplit();
 			int bestLocalDimIndex = splitInfo.Item1;
 			double bestSplit = splitInfo.Item2;
 			double maxExpectedInfo = splitInfo.Item3;

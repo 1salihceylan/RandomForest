@@ -12,7 +12,7 @@ namespace RandomForest
 {
     static class MainClass
     {
-		private const int NUM_MODELS = 5000;
+		private const int NUM_MODELS = 1000;
 		private const int COLS_PER_MODEL = 10;
 		private const bool PARALLEL = true;
 
@@ -23,7 +23,7 @@ namespace RandomForest
 
 		private static void MainMain()
 		{
-			Write("Running Random Forest");
+			Write("Running Random Forest ({0} trees)", NUM_MODELS);
 
 			Write("loading training data");
 			var traindata = Parser.LoadTrainData();
@@ -71,32 +71,6 @@ namespace RandomForest
 				return;
 			}
 
-//			Write("creating and tuning classifer (parallel)");
-//			var foo = Yarr.XRange(-0.5, 0.6, 0.1).AsParallel()
-//				.Select(
-//					exponent =>
-//					{
-//
-//					}
-//				).ToList();
-//			double bestCutoff = double.NaN;
-//			double bestExponent = double.NaN;
-//			double bestScore = double.NegativeInfinity;
-//			foreach (var result in foo)
-//			{
-//				if (result.score > bestScore)
-//				{
-//					bestScore = result.score;
-//					bestExponent = result.exponent;
-//					bestCutoff = result.cutoff;
-//				}
-//			}
-//			Classifier classifier = new Classifier(forest);
-//			classifier.Cutoff = bestCutoff;
-//			WriteDone();
-//			Console.WriteLine(string.Format("\t\tpredicted ams: {0}", bestScore));
-//			Console.WriteLine(string.Format("\t\tcutoff: {0} (e^{1})", bestCutoff, bestExponent));
-
 			Write("loading test data");
 			var testdata = Parser.LoadTestData();
 			WriteDone();
@@ -131,12 +105,12 @@ namespace RandomForest
 
 		private static void PlaySound(string filename)
 		{
-			Process.Start(
+			/* Process.Start(
 				new ProcessStartInfo(
 					"afplay",
 					string.Format("Resources/{0}", filename)
 				)
-			);
+			); */
 		}
 
 		private const double TOTAL_S = 691.0;

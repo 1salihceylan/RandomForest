@@ -47,7 +47,6 @@ namespace RandomForest
 				models.Add(model);
 			}
 			models.CompleteAdding();
-			Console.WriteLine("Done adding models");
 
 			var scores = new BlockingCollection<RandomForest.Score>(cores * 10);
 			int numScorerTasks = cores;
@@ -78,9 +77,7 @@ namespace RandomForest
 			Task.Factory.StartNew(
 				() =>
 				{
-					Console.WriteLine("Waiting for all scorer tasks to finish");
 					Task.WaitAll(scorerTasks);
-					Console.WriteLine("All score tasks finished");
 					scores.CompleteAdding();
 				}
 			);
@@ -147,11 +144,9 @@ namespace RandomForest
 				bScoresCollection.Add(score.BScores);
 			}
 
-			Console.WriteLine("Done collecting sub-scores");
 			sScoresCollection.CompleteAdding();
 			bScoresCollection.CompleteAdding();
 			Task.WaitAll(sTask, bTask);
-			Console.WriteLine("All sub-score accumulators finished");
 
 			double[] sScores = new double[nrows];
 			double[] bScores = new double[nrows];

@@ -6,7 +6,7 @@ namespace RandomForest
 {
 	public static class RandomUtils
 	{
-		private static Random Rng = new Random();
+		public static Random Rng = new Random();
 
 		private class IndexList : List<int>
 		{
@@ -44,6 +44,18 @@ namespace RandomForest
 				pastIndices.InsertSorted(nextIndex);
 				yield return source[nextIndex];
 			}
+		}
+
+		public static T Choice<T>(T[] source)
+		{
+			int index = Rng.Next(source.Length);
+			return source[index];
+		}
+
+		public static double RandBetween(double low, double high)
+		{
+			double rangeSize = high - low;
+			return (Rng.NextDouble() * rangeSize) + low;
 		}
 
 		public static double[] RandBetween(double low, double high, int howMany)
